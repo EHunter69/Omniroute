@@ -149,7 +149,7 @@ test("admitChatRequest with explicit controller overrides per-connection lookup"
   if (result.admit) result.lease?.release();
 });
 
-test("admitChatStructure routes structural rejection to per-connection controller", async () => {
+test("admitChatStructure routes structural rejection to per-connection controller when heap pressure is genuinely high (#10183/#10268)", async () => {
   // occupy sess-a's per-connection controller via the module-level instance
   const controller = perConnectionAdmissionController.getController("sess-a");
   const occupied = controller.tryAcquireHeavy();
@@ -166,6 +166,8 @@ test("admitChatStructure routes structural rejection to per-connection controlle
       heavyMessages: 1,
       heavyTools: 10,
       heavyTokens: 10_000,
+      // #10183/#10268: shedding is now conditional on real heap pressure.
+      heapPressureCheck: () => true,
     }
   );
   // Session A is busy → 503
