@@ -103,7 +103,6 @@ const LOW_PRIORITY_NOISE_HEADERS = new Set([
   "content-security-policy",
   "date",
   "x-robots-tag",
-  "x-request-context-id",
 ]);
 
 function getForwardingPriority(headerName: string): number {
