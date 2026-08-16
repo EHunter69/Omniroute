@@ -1,12 +1,11 @@
 // src/lib/db/adapters/sqljsAdapter.ts
 import fs from "node:fs";
-import { createRequire } from "node:module";
+import { runtimeRequire as _require } from "./runtimeRequire";
 import path from "node:path";
 import type { SqliteAdapter, PreparedStatement, RunResult } from "./types";
 
 const SAVE_DEBOUNCE_MS = 100;
 const CHECKPOINT_INTERVAL_MS = 60_000;
-const _require = createRequire(import.meta.url);
 
 let _sqlJsLib: Awaited<ReturnType<(typeof import("sql.js"))["default"]>> | null = null;
 
@@ -133,7 +132,13 @@ export async function createSqlJsAdapter(filePath: string): Promise<SqliteAdapte
   function persist(): void {
     if (filePath === ":memory:") return;
     const data = db.export();
-    fs.writeFileSync(filePath, Buffer.from(data));
+    // Atomic replace (temp file + rename): a crash or concurrent reader can
+    // never observe a torn (half-written) DB file. Direct writeFileSync of the
+    // full export left the production DB corrupt whenever the process died
+    // mid-write (observed with the sql.js fallback tier on Windows).
+    const tmpPath = `${filePath}.tmp`;
+    fs.writeFileSync(tmpPath, Buffer.from(data));
+    fs.renameSync(tmpPath, filePath);
     dirty = false;
   }
 
