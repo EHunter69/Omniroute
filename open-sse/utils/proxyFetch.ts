@@ -65,6 +65,98 @@ function tagProxyUnreachable<T>(err: T): T {
   return err;
 }
 
+// ── #10214: bounded response-start window for the direct (no-proxy) path ──
+//
+// A keep-alive pooled socket that silently drops (half-open, no RST) surfaces NO
+// transport error: undici's headersTimeout (default 600s via FETCH_TIMEOUT_MS)
+// is the only guard, so a zombie pooled socket can stall a direct provider
+// request (opencode-go, command-code, ...) until the caller's deadline or a
+// service restart — the fresh-socket retry never triggers because no error was
+// thrown. Bound the response-start window per direct attempt; on expiry the
+// direct loop retries once on the fresh no-keep-alive dispatcher
+// (getRetryDispatcher), which opens a brand-new socket that cannot be the zombie.
+// `OMNIROUTE_DIRECT_HEADERS_TIMEOUT_MS` overrides the default; 0 disables the
+// bound (previous behavior).
+const DEFAULT_DIRECT_HEADERS_TIMEOUT_MS = 30_000;
+const DIRECT_RESPONSE_START_TIMEOUT_CODE = "DIRECT_RESPONSE_START_TIMEOUT";
+
+function resolveDirectHeadersTimeoutMs(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = env.OMNIROUTE_DIRECT_HEADERS_TIMEOUT_MS;
+  if (raw == null || raw.trim() === "") return DEFAULT_DIRECT_HEADERS_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
+}
+
+function createDirectResponseStartTimeout(timeoutMs: number): Error & { code: string } {
+  const err = new Error(
+    `Direct response did not start within ${timeoutMs}ms — retrying on a fresh socket`
+  ) as Error & { code: string };
+  err.name = "TimeoutError";
+  err.code = DIRECT_RESPONSE_START_TIMEOUT_CODE;
+  return err;
+}
+
+function isDirectResponseStartTimeout(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === "object" &&
+    "code" in err &&
+    err.code === DIRECT_RESPONSE_START_TIMEOUT_CODE
+  );
+}
+
+/** Merge two abort signals locally (avoid importing from executors/base — cycle risk). */
+function mergeAbortSignalsLocal(
+  primary: AbortSignal | null | undefined,
+  secondary: AbortSignal
+): AbortSignal {
+  if (!primary) return secondary;
+  if (primary.aborted) return primary;
+  const controller = new AbortController();
+  const onPrimaryAbort = () => controller.abort(primary.reason);
+  const onSecondaryAbort = () => controller.abort(secondary.reason);
+  const cleanup = () => {
+    primary.removeEventListener("abort", onPrimaryAbort);
+    secondary.removeEventListener("abort", onSecondaryAbort);
+  };
+  primary.addEventListener("abort", onPrimaryAbort, { once: true });
+  secondary.addEventListener("abort", onSecondaryAbort, { once: true });
+  controller.signal.addEventListener("abort", cleanup, { once: true });
+  return controller.signal;
+}
+
+/**
+ * Run a direct-path undici fetch with a bounded response-start window (#10214).
+ * Only the fetch promise (response headers) is bounded — the response body
+ * streams through untouched afterwards. Resolves with the fetch result, or
+ * rejects with `DIRECT_RESPONSE_START_TIMEOUT` when no response headers arrived
+ * in time. A caller-initiated abort propagates unchanged (no retry trigger).
+ */
+async function directFetchWithBoundedResponseStart(
+  input: RequestInfo | URL,
+  options: FetchWithDispatcherOptions,
+  fetchImpl: (...args: unknown[]) => Promise<Response>,
+  timeoutMs: number
+): Promise<Response> {
+  if (!timeoutMs || timeoutMs <= 0) return fetchImpl(input, options);
+
+  const attemptController = new AbortController();
+  const timer = setTimeout(() => {
+    attemptController.abort(createDirectResponseStartTimeout(timeoutMs));
+  }, timeoutMs);
+  timer.unref?.();
+
+  try {
+    const signal = mergeAbortSignalsLocal(options.signal, attemptController.signal);
+    return await fetchImpl(input, { ...options, signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Per-request tracking of whether TLS fingerprint was used */
 type TlsFingerprintStore = { used: boolean };
 const tlsFingerprintContext = new AsyncLocalStorage<TlsFingerprintStore>();
@@ -526,18 +618,50 @@ async function patchedFetch(
     const _nativeFallback =
       (deps.nativeFetch as FetchWithDispatcher | undefined) ?? originalFetchWithDispatcher;
     let lastDispatcherError: unknown = null;
+    const directHeadersTimeoutMs = resolveDirectHeadersTimeoutMs();
+    let targetHostForLogs = "";
+    try {
+      targetHostForLogs = new URL(targetUrl).host;
+    } catch {
+      // ignore — logging is best-effort
+    }
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        return await _undiciDirect(input, {
-          ...options,
-          // #4252: first attempt uses the pooled keep-alive dispatcher; a retry
-          // (after a transient socket error) uses the no-keep-alive dispatcher so
-          // it opens a FRESH socket instead of grabbing another stale pooled one
-          // — the burst pattern was the retry re-hitting a dead pooled socket and
-          // then falling through to native fetch (which also pools) → 502.
-          dispatcher: attempt === 0 ? getDefaultDispatcher() : getRetryDispatcher(),
-        });
+        // #10214: bound the response-start window per attempt. A silently dropped
+        // pooled keep-alive socket surfaces NO transport error, so without this the
+        // fetch hangs until undici's headersTimeout (600s default) or the caller's
+        // deadline — stalling direct providers (opencode-go, command-code) until a
+        // service restart. On expiry the retry below moves to a fresh socket.
+        return await directFetchWithBoundedResponseStart(
+          input,
+          {
+            ...options,
+            // #4252: first attempt uses the pooled keep-alive dispatcher; a retry
+            // (after a transient socket error) uses the no-keep-alive dispatcher so
+            // it opens a FRESH socket instead of grabbing another stale pooled one
+            // — the burst pattern was the retry re-hitting a dead pooled socket and
+            // then falling through to native fetch (which also pools) → 502.
+            dispatcher: attempt === 0 ? getDefaultDispatcher() : getRetryDispatcher(),
+          },
+          _undiciDirect,
+          directHeadersTimeoutMs
+        );
       } catch (dispatcherError) {
+        // #10214: pooled attempt didn't produce response headers within the bound —
+        // fail over once to the fresh no-keep-alive dispatcher (brand-new socket).
+        if (isDirectResponseStartTimeout(dispatcherError)) {
+          if (attempt === 0 && maxAttempts > 1) {
+            console.warn(
+              `[ProxyFetch] Direct response-start timeout (${directHeadersTimeoutMs}ms) on pooled dispatcher — retrying on fresh no-keep-alive dispatcher: ${targetHostForLogs}`
+            );
+            lastDispatcherError = dispatcherError;
+            continue;
+          }
+          // Fresh-dispatcher attempt (or non-replayable body) also stalled. No
+          // native-fetch fallback: native fetch pools too and would hang identically
+          // on a silent upstream — surface the timeout so the combo can fail over.
+          throw dispatcherError;
+        }
         const msg =
           dispatcherError instanceof Error ? dispatcherError.message : String(dispatcherError);
         // CAUTION: Do NOT fallback to native fetch if the error is a version mismatch (invalid onRequestStart)
