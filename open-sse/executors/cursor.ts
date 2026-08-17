@@ -677,17 +677,15 @@ export function processFrame(
       ctx.receivedText &&
       ctx.endReason !== "tool_calls"
     ) {
-      // Cursor short-circuits turn_ended for plain chats — kv_server_message
-      // after text means the model finished and the server is saving the
-      // turn. Phase 8 keeps both signals as defense-in-depth.
-      //
-      // Safe vs tool calls: when the model invokes a tool, the exec_mcp event
-      // always arrives at or before this kv checkpoint (verified across many
-      // live composer-2.5 trials — a tool call never follows kv_after_text), so
-      // endReason is already "tool_calls" by the time we get here. Ending on
-      // kv_after_text therefore never truncates a pending tool call.
       ctx.kvAfterTextSeen = true;
-      ctx.endReason = "kv_after_text";
+      // Only terminate the turn for composer models where kv_server_message
+      // after text reliably means the model finished (verified on composer-2.5).
+      // Non-composer models (e.g. grok-4.5-high) may emit this checkpoint
+      // mid-stream before tool calls are decoded — terminating early would
+      // truncate pending exec_mcp events (issue #10215).
+      if (isComposerModel(ctx.model)) {
+        ctx.endReason = "kv_after_text";
+      }
     }
   }
 }
