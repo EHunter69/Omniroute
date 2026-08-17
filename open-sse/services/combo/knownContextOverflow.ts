@@ -17,6 +17,7 @@
  */
 
 import { getResolvedModelCapabilities } from "../modelCapabilities.ts";
+import { areContextWindowChecksDisabled } from "../../../src/shared/utils/featureFlags.ts";
 import { deriveRequestCompatibilityRequirements } from "./comboStructure.ts";
 import type { ResolvedComboTarget } from "./types.ts";
 
@@ -72,6 +73,7 @@ export function getKnownContextOverflow(
   options: { clientManagedResponsesContext?: boolean } = {}
 ): KnownContextOverflow | null {
   if (targets.length === 0) return null;
+  if (areContextWindowChecksDisabled()) return null;
   // Native Codex Responses clients compact their own item history. Let the concrete
   // Codex target enforce its effective context limit (including operator overrides)
   // instead of rejecting early against a smaller catalog hint. Keep this scoped to
