@@ -302,7 +302,7 @@ export async function createEmbeddingResponse(
       clientRawRequest: options.clientRawRequest || null,
       apiKeyId: options.apiKeyId || null,
       apiKeyName: options.apiKeyName || null,
-      connectionId: options.connectionId || null,
+      connectionId: options.connectionId || connectionIdForProxy || null,
     });
 
   const result = connectionIdForProxy
