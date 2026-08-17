@@ -9,8 +9,17 @@
 import { v4 as uuidv4 } from "uuid";
 import { getDbInstance, isCloud, isBuildPhase } from "./db/core";
 import { ensureProxyLogsColumns } from "./db/schemaColumns";
+import { getCachedSettings } from "./db/readCache";
 
 const shouldPersistToDisk = !isCloud && !isBuildPhase;
+
+// #10348: cache debugMode to avoid async in synchronous log path
+let cachedDebugMode = false;
+getCachedSettings()
+  .then((s) => {
+    cachedDebugMode = (s as Record<string, unknown>)?.debugMode === true;
+  })
+  .catch(() => {});
 
 const MAX_IN_MEMORY_ENTRIES = 200;
 
@@ -129,10 +138,12 @@ export function logProxyEvent(entry: ProxyLogInput) {
 
   // Structured egress line so the operator can confirm, in the proxy logs, which
   // IP each account is entering (clientIp) and leaving (egressIp) by.
+  // #10348: redact client IP, egress IP, and account prefix by default —
+  // these are privacy-sensitive fields that should only appear in debugMode.
   if (log.proxy || log.egressIp) {
     console.log(
-      `[ProxyEgress] ${log.provider || "-"}/${log.account || "-"} ` +
-        `in=${log.clientIp || "?"} out=${log.egressIp || "?"} ` +
+      `[ProxyEgress] ${log.provider || "-"}/${cachedDebugMode ? log.account || "-" : "***"} ` +
+        `in=${cachedDebugMode ? log.clientIp || "?" : "***"} out=${cachedDebugMode ? log.egressIp || "?" : "***"} ` +
         `proxy=${log.level}${log.proxy ? `:${log.proxy.host}` : ""} status=${log.status}`
     );
   }
