@@ -9,6 +9,7 @@ import {
   UPSTREAM_PROXY_PROVIDERS,
   WEB_COOKIE_PROVIDERS,
   isClaudeCodeCompatibleProvider,
+  resolveProviderId,
   supportsApiKeyOnFreeProvider,
   type RiskNoticeVariant,
 } from "@/shared/constants/providers";
@@ -88,8 +89,7 @@ export interface ResolvedCompatibleProviderCatalogEntry extends ProviderCatalogM
 }
 
 export type ResolvedProviderCatalogEntry =
-  | ResolvedStaticProviderCatalogEntry
-  | ResolvedCompatibleProviderCatalogEntry;
+  ResolvedStaticProviderCatalogEntry | ResolvedCompatibleProviderCatalogEntry;
 
 export const STATIC_PROVIDER_CATALOG_GROUPS: Record<
   StaticProviderCatalogCategory,
@@ -181,9 +181,10 @@ export function getStaticProviderCatalogGroup(
 export function resolveStaticProviderCatalogEntry(
   providerId: string
 ): ResolvedStaticProviderCatalogEntry | null {
+  const canonicalId = resolveProviderId(providerId);
   for (const category of STATIC_PROVIDER_CATALOG_RESOLUTION_ORDER) {
     const group = STATIC_PROVIDER_CATALOG_GROUPS[category];
-    const provider = group.providers[providerId];
+    const provider = group.providers[canonicalId] ?? group.providers[providerId];
     if (!provider) continue;
     return {
       ...provider,

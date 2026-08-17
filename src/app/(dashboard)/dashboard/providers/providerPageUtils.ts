@@ -108,6 +108,8 @@ const OAUTH_CARD_API_KEY_CONNECTION_PROVIDER_IDS = new Set(["kiro", "amazon-q", 
 const PROVIDER_CONNECTION_ALIASES: Record<string, readonly string[]> = {
   alibaba: ["alibaba-cn"],
   "kimi-coding": ["kimi-coding-apikey"],
+  magnific: ["freepik"],
+  freepik: ["magnific"],
 };
 
 export function connectionBelongsToProviderPage(

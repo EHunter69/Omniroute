@@ -8,6 +8,7 @@ import {
   isOpenAICompatibleProvider,
   isSelfHostedChatProvider,
   providerAllowsOptionalApiKey,
+  resolveProviderId,
   WEB_COOKIE_PROVIDERS,
 } from "@/shared/constants/providers";
 import { MODAL_DEFAULT_VALIDATION_MODEL_ID } from "@/shared/constants/modal";
@@ -133,6 +134,7 @@ export { validateWebCookieProvider, bytezValidationResultFromStatus };
 // They are re-exported above to preserve the historical public surface.
 
 export async function validateProviderApiKey({ provider, apiKey, providerSpecificData = {} }: any) {
+  provider = typeof provider === "string" ? resolveProviderId(provider) : provider;
   const requiresApiKey = !providerAllowsOptionalApiKey(provider);
   const isLocal = isLocalProvider(provider);
 
@@ -198,6 +200,8 @@ export async function validateProviderApiKey({ provider, apiKey, providerSpecifi
       validateImageProviderApiKey({ provider: "recraft", apiKey, providerSpecificData }),
     topaz: ({ apiKey, providerSpecificData }: any) =>
       validateImageProviderApiKey({ provider: "topaz", apiKey, providerSpecificData }),
+    magnific: ({ apiKey, providerSpecificData }: any) =>
+      validateImageProviderApiKey({ provider: "magnific", apiKey, providerSpecificData }),
     elevenlabs: validateElevenLabsProvider,
     inworld: validateInworldProvider,
     kie: validateKieProvider,

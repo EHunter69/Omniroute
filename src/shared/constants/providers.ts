@@ -61,7 +61,7 @@ export const IMAGE_ONLY_PROVIDER_IDS = new Set([
   "recraft",
   "topaz",
   "segmind",
-  "freepik",
+  "magnific",
 ]);
 
 export const AGGREGATOR_PROVIDER_IDS = new Set([
