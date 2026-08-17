@@ -7,8 +7,14 @@ import { resolveChatCoreRequestSetup } from "./chatCore/requestSetup.ts";
 import { normalizeOpenAICompatibleTools } from "./chatCore/openAICompatibleTools.ts";
 import { buildFailureUsageRecord } from "./chatCore/failureUsage.ts";
 import { estimateFinalInputTokens } from "./chatCore/contextEstimation.ts";
-import { extractSystemRoleMessages, relocateDirectiveOnlyMessages } from "./chatCore/claudeSystemRole.ts";
-export { extractSystemRoleMessages, relocateDirectiveOnlyMessages } from "./chatCore/claudeSystemRole.ts";
+import {
+  extractSystemRoleMessages,
+  relocateDirectiveOnlyMessages,
+} from "./chatCore/claudeSystemRole.ts";
+export {
+  extractSystemRoleMessages,
+  relocateDirectiveOnlyMessages,
+} from "./chatCore/claudeSystemRole.ts";
 import { checkIdempotencyCache } from "./chatCore/idempotency.ts";
 import { checkSemanticCache } from "./chatCore/semanticCache.ts";
 import { checkLifecycle, resolveLifecycle } from "./chatCore/modelLifecyclePolicy.ts";
@@ -2743,6 +2749,8 @@ export async function handleChatCore({
     connectionId,
     clientResponseFormat,
     clientAbortSignal: clientRawRequest?.signal,
+    allowCompletedToolHandoffGrace: isCodexResponsesEcho,
+    clientDisconnectGracePeriodMs: STREAM_DISCONNECT_GRACE_PERIOD_MS,
   });
 
   const dedupRequestBody = { ...translatedBody, model: `${provider}/${model}`, stream };
