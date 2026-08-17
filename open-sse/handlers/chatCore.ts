@@ -7,8 +7,14 @@ import { resolveChatCoreRequestSetup } from "./chatCore/requestSetup.ts";
 import { normalizeOpenAICompatibleTools } from "./chatCore/openAICompatibleTools.ts";
 import { buildFailureUsageRecord } from "./chatCore/failureUsage.ts";
 import { estimateFinalInputTokens } from "./chatCore/contextEstimation.ts";
-import { extractSystemRoleMessages, relocateDirectiveOnlyMessages } from "./chatCore/claudeSystemRole.ts";
-export { extractSystemRoleMessages, relocateDirectiveOnlyMessages } from "./chatCore/claudeSystemRole.ts";
+import {
+  extractSystemRoleMessages,
+  relocateDirectiveOnlyMessages,
+} from "./chatCore/claudeSystemRole.ts";
+export {
+  extractSystemRoleMessages,
+  relocateDirectiveOnlyMessages,
+} from "./chatCore/claudeSystemRole.ts";
 import { checkIdempotencyCache } from "./chatCore/idempotency.ts";
 import { checkSemanticCache } from "./chatCore/semanticCache.ts";
 import { checkLifecycle, resolveLifecycle } from "./chatCore/modelLifecyclePolicy.ts";
@@ -158,7 +164,10 @@ import {
   deriveRequestCapabilityRequirements,
   buildCapabilityMismatchMessage,
 } from "@/shared/constants/capabilities/capabilityFilter.ts";
-import { isFeatureFlagEnabled } from "@/shared/utils/featureFlags.ts";
+import {
+  areContextWindowChecksDisabled,
+  isFeatureFlagEnabled,
+} from "@/shared/utils/featureFlags.ts";
 import {
   REASONING_BUFFER_MIN_TRIGGER,
   buildReasoningProbeTruncatedResponse,
@@ -1938,13 +1947,18 @@ export async function handleChatCore({
   const modelOutputCap = toPositiveInteger(
     getExplicitModelOutputCap({ provider, model: effectiveModel })
   );
+  const contextWindowChecksDisabled = areContextWindowChecksDisabled();
   const outputBudget = enforceOutputTokenBudget(
     body as Record<string, unknown>,
     finalEstimatedInputTokens,
-    finalContextLimit,
+    contextWindowChecksDisabled ? Number.MAX_SAFE_INTEGER : finalContextLimit,
     targetFormat === FORMATS.CLAUDE && sourceFormat !== FORMATS.CLAUDE ? DEFAULT_MAX_TOKENS : 0,
     modelOutputCap,
-    toPositiveInteger(resolveInputTokenCapForGate({ provider, model: effectiveModel }, { isCombo }))
+    contextWindowChecksDisabled
+      ? null
+      : toPositiveInteger(
+          resolveInputTokenCapForGate({ provider, model: effectiveModel }, { isCombo })
+        )
   );
   if (outputBudget.ok === false) {
     const exceededInputCap = outputBudget.maxInputTokens !== undefined;

@@ -12,7 +12,7 @@ export interface FeatureFlagDefinition {
 }
 
 export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
-  // ──────────────── Security (9) ────────────────
+  // ──────────────── Security (8) ────────────────
   {
     key: "REQUIRE_API_KEY",
     label: "Require API Key",
@@ -105,7 +105,7 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     requiresRestart: false,
     warningLevel: "danger",
   },
-  // ──────────────── Network (7) ────────────────
+  // ──────────────── Network (10) ────────────────
   {
     key: "ENABLE_TLS_FINGERPRINT",
     label: "TLS Fingerprint",
@@ -222,7 +222,7 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     warningLevel: "info",
   },
 
-  // ──────────────── Policies (4) ────────────────
+  // ──────────────── Policies (6) ────────────────
   {
     key: "TOOL_POLICY_MODE",
     label: "Tool Policy Mode",
@@ -270,6 +270,18 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     warningLevel: "caution",
   },
   {
+    key: "DISABLE_CONTEXT_WINDOW_CHECKS",
+    label: "Disable Context Window Checks",
+    description:
+      "Skip OmniRoute's local context-window and max-input-token checks for direct and combo-routed model requests. Upstream providers remain responsible for enforcing their actual limits. Off by default.",
+    descriptionI18nKey: "featureFlagDisableContextWindowChecksDescription",
+    category: "policies",
+    defaultValue: "false",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "danger",
+  },
+  {
     key: "RADAR_ENABLED",
     label: "Radar",
     description:
@@ -282,7 +294,7 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     warningLevel: "info",
   },
 
-  // ──────────────── Runtime (16) ────────────────
+  // ──────────────── Runtime (17) ────────────────
   {
     key: "RESPONSES_PASSTHROUGH_DROP_COMMENTARY",
     label: "Drop Responses Commentary",
