@@ -1,0 +1,1 @@
+- **fix(deepseek):** Advertise `none`, `low`, `high`, and `max` for V4 Pro and Flash on DeepSeek and OpenCode Go, deriving effort aliases from base-model metadata ([#10540](https://github.com/diegosouzapw/OmniRoute/pull/10540)) — thanks @jackjinke
